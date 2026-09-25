@@ -16,6 +16,8 @@ up() { ss -ltn | grep -q ":$1 "; }
 if [ ! -f "$RM_APP_DATA/recovery_monitor.sqlite3" ]; then
   (cd "$ROOT/recovery-monitor-backend" && "$APP_VENV/bin/python" -m app.seed) || echo "Demo seed skipped (dataset not found); sign up to create accounts."
 fi
+# Correct-form reference clips for all six exercises (skips exercises that already have one).
+(cd "$ROOT/recovery-monitor-backend" && "$APP_VENV/bin/python" -m app.reference_seed) || echo "Reference clips skipped (dataset not found)."
 
 if up "$AI_PORT"; then echo "AI service already on :$AI_PORT"
 else (cd "$ROOT" && nohup "$AI_VENV/bin/uvicorn" model.ai_service:app --host 127.0.0.1 --port "$AI_PORT" > "$LOGS/ai.log" 2>&1 &); echo "AI service starting on :$AI_PORT (log $LOGS/ai.log)"; fi
