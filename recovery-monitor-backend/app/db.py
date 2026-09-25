@@ -175,6 +175,12 @@ CREATE TABLE IF NOT EXISTS tutorials (
     validation_json TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'approved', 'request_changes')),
     request_changes_notes TEXT,
+    media_status TEXT NOT NULL DEFAULT 'not_requested' CHECK (media_status IN ('not_requested', 'queued', 'processing', 'ready', 'failed')),
+    media_path TEXT,
+    media_error TEXT,
+    media_voice_enabled INTEGER NOT NULL DEFAULT 0,
+    media_voice_status TEXT NOT NULL DEFAULT 'not_requested' CHECK (media_voice_status IN ('not_requested', 'generated', 'unavailable', 'failed')),
+    media_generated_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     approved_at TEXT
@@ -210,6 +216,16 @@ def conn() -> sqlite3.Connection:
         tutorial_columns = {row[1] for row in _conn.execute("PRAGMA table_info(tutorials)")}
         if "request_changes_notes" not in tutorial_columns:
             _conn.execute("ALTER TABLE tutorials ADD COLUMN request_changes_notes TEXT")
+        for name, definition in {
+            "media_status": "TEXT NOT NULL DEFAULT 'not_requested'",
+            "media_path": "TEXT",
+            "media_error": "TEXT",
+            "media_voice_enabled": "INTEGER NOT NULL DEFAULT 0",
+            "media_voice_status": "TEXT NOT NULL DEFAULT 'not_requested'",
+            "media_generated_at": "TEXT",
+        }.items():
+            if name not in tutorial_columns:
+                _conn.execute(f"ALTER TABLE tutorials ADD COLUMN {name} {definition}")
         _conn.commit()
     return _conn
 

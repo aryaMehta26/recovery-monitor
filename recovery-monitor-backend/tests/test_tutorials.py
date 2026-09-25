@@ -190,3 +190,52 @@ def test_request_changes_notes_are_saved_and_returned(monkeypatch, client):
     assert response.json()["request_changes_notes"] == "Please clarify the controlled pace cue."
     assert client.get(f"/api/tutorials/{draft['id']}").json()["request_changes_notes"] == \
         "Please clarify the controlled pace cue."
+
+
+def test_media_generation_is_local_and_patient_gated(monkeypatch, client, tiny_video):
+    _, session_id, reference_id = _source(client, "media")
+    with db.tx() as c:
+        c.execute("UPDATE reference_videos SET path=? WHERE id=?", (str(tiny_video), reference_id))
+    _valid_llm(monkeypatch)
+    draft = client.post(f"/api/sessions/{session_id}/tutorials", json={"reference_video_id": reference_id}).json()
+
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"email": "tutorial-patient-media@example.com",
+                                                 "password": "development-password"}).status_code == 200
+    assert client.get(f"/api/tutorials/{draft['id']}/media").status_code == 403
+
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"email": "therapist.demo@example.com",
+                                                 "password": "recovery-demo"}).status_code == 200
+    from app import jobs as jobs_module
+    monkeypatch.setattr(jobs_module, "submit_tutorial_media",
+                        lambda tutorial_id, voice_enabled=False: jobs_module.run_tutorial_media(tutorial_id, voice_enabled))
+    queued = client.post(f"/api/tutorials/{draft['id']}/media", json={"voice_enabled": True})
+    assert queued.status_code == 202
+    assert queued.json()["media_status"] == "queued"
+
+    ready = client.get(f"/api/tutorials/{draft['id']}").json()
+    assert ready["media"]["status"] == "ready"
+    assert ready["media"]["voice_status"] == "unavailable"
+
+    approved = client.post(f"/api/tutorials/{draft['id']}/approve", json={"notes": "Media reviewed"})
+    assert approved.status_code == 200
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"email": "tutorial-patient-media@example.com",
+                                                 "password": "development-password"}).status_code == 200
+    media = client.get(f"/api/tutorials/{draft['id']}/media")
+    assert media.status_code == 200
+    assert media.headers["content-type"].startswith("video/mp4")
+    assert len(media.content) > 100
+
+
+def test_patient_cannot_start_tutorial_media(monkeypatch, client, tiny_video):
+    _, session_id, reference_id = _source(client, "media-auth")
+    with db.tx() as c:
+        c.execute("UPDATE reference_videos SET path=? WHERE id=?", (str(tiny_video), reference_id))
+    _valid_llm(monkeypatch)
+    draft = client.post(f"/api/sessions/{session_id}/tutorials", json={"reference_video_id": reference_id}).json()
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"email": "tutorial-patient-media-auth@example.com",
+                                                 "password": "development-password"}).status_code == 200
+    assert client.post(f"/api/tutorials/{draft['id']}/media", json={}).status_code == 403

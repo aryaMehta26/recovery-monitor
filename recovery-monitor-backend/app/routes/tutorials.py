@@ -2,11 +2,13 @@
 
 import json
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from app import db
+from app import db, jobs
 from app.auth import current_user, require_assigned_therapist_session
 from app.tutorial import generate
 
@@ -19,6 +21,10 @@ class TutorialCreateIn(BaseModel):
 
 class TutorialActionIn(BaseModel):
     notes: str = Field("", max_length=2000)
+
+
+class TutorialMediaIn(BaseModel):
+    voice_enabled: bool = False
 
 
 class TutorialEditIn(BaseModel):
@@ -40,6 +46,15 @@ def _row(tutorial_id: str) -> dict:
                                        "FROM reference_videos WHERE id = ?", row["reference_video_id"])
     result["source_session"] = {"id": row["source_session_id"]}
     result["request_changes_notes"] = row.get("request_changes_notes")
+    result.pop("media_path", None)
+    result["media"] = {
+        "status": row.get("media_status", "not_requested"),
+        "voice_enabled": bool(row.get("media_voice_enabled", 0)),
+        "voice_status": row.get("media_voice_status", "not_requested"),
+        "generated_at": row.get("media_generated_at"),
+        "error": row.get("media_error"),
+        "url": f"/api/tutorials/{tutorial_id}/media" if row.get("media_status") == "ready" else None,
+    }
     return result
 
 
@@ -130,6 +145,43 @@ def request_tutorial_changes(tutorial_id: str, body: TutorialActionIn, request: 
         c.execute("UPDATE tutorials SET status='request_changes', request_changes_notes=?, updated_at=?, approved_at=NULL WHERE id=?",
                   (body.notes, now, tutorial_id))
     return _row(tutorial_id)
+
+
+@router.post("/tutorials/{tutorial_id}/media", status_code=202)
+def generate_tutorial_media(tutorial_id: str, body: TutorialMediaIn, request: Request):
+    tutorial = _row(tutorial_id)
+    _therapist_can_edit(request, tutorial)
+    if tutorial["status"] == "approved" and tutorial["media"]["status"] == "ready":
+        return tutorial
+    if tutorial["media"]["status"] in ("queued", "processing"):
+        raise HTTPException(409, "Tutorial media generation is already running")
+    with db.tx() as c:
+        c.execute("UPDATE tutorials SET media_status='queued', media_error=NULL, media_voice_enabled=?, "
+                  "media_voice_status=?, updated_at=? WHERE id=?",
+                  (int(body.voice_enabled), "not_requested", db.now(), tutorial_id))
+    jobs.submit_tutorial_media(tutorial_id, body.voice_enabled)
+    return {"tutorial_id": tutorial_id, "media_status": "queued", "voice_enabled": body.voice_enabled}
+
+
+@router.get("/tutorials/{tutorial_id}/media")
+def tutorial_media(tutorial_id: str, request: Request):
+    user = current_user(request)
+    tutorial = db.one("SELECT * FROM tutorials WHERE id = ?", tutorial_id)
+    if not tutorial:
+        raise HTTPException(404, "No such tutorial")
+    if user["role"] == "patient":
+        if tutorial["patient_id"] != user["id"] or tutorial["status"] != "approved":
+            raise HTTPException(403, "This tutorial media is not available")
+    elif user["role"] == "therapist":
+        require_assigned_therapist_session(request, tutorial["source_session_id"])
+    else:
+        raise HTTPException(403, "Unsupported account role")
+    if tutorial["media_status"] != "ready" or not tutorial["media_path"]:
+        raise HTTPException(404, "Tutorial media is not ready")
+    path = Path(tutorial["media_path"])
+    if not path.is_file():
+        raise HTTPException(404, "Tutorial media is not available")
+    return FileResponse(path, media_type="video/mp4", filename=f"{tutorial_id}.mp4")
 
 
 @router.get("/patient/tutorials")
