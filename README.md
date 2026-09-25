@@ -1,6 +1,8 @@
 <div align="center">
 
 # Recovery Monitor
+<img width="1600" height="838" alt="image" src="https://github.com/user-attachments/assets/6e57be0b-d8a7-4286-9f8a-3a2e85aeda12" />
+
 
 ### On-device AI that turns home rehab exercise into evidence a physiotherapist can trust
 
