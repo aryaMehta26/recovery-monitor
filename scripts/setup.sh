@@ -22,12 +22,16 @@ echo "== 3/5 AI environment ($AI_VENV)"
 "$AI_VENV/bin/pip" install -q torch torchvision --index-url https://download.pytorch.org/whl/cu130 || "$AI_VENV/bin/pip" install -q torch torchvision
 "$AI_VENV/bin/pip" install -q "transformers>=5.17" "peft>=0.21" accelerate fastapi uvicorn pillow numpy soundfile python-multipart huggingface_hub
 
-echo "== 4/5 base models in $MODELS"
+echo "== 4/5 base models in $MODELS and the MediaPipe pose model"
 mkdir -p "$MODELS"
 [ -d "$MODELS/Qwen3-VL-4B-Instruct" ] || "$AI_VENV/bin/hf" download Qwen/Qwen3-VL-4B-Instruct --local-dir "$MODELS/Qwen3-VL-4B-Instruct"
 [ -d "$MODELS/whisper-large-v3-turbo" ] || "$AI_VENV/bin/hf" download openai/whisper-large-v3-turbo --local-dir "$MODELS/whisper-large-v3-turbo"
 if command -v ollama >/dev/null; then ollama pull "${RM_LLM_MODEL:-nemotron-3.5-lightning}" || true
 else echo "   Ollama not found: install it for the AI report (the app falls back to a template report without it)."; fi
+
+POSE="${RM_DATA:-$HOME/rm-data}/pose_models"; mkdir -p "$POSE"
+[ -f "$POSE/pose_landmarker_full.task" ] || curl -fsSL -o "$POSE/pose_landmarker_full.task" \
+  https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task
 
 echo "== 5/5 frontend build"
 cd "$ROOT/recovery-monitor-frontend" && npm install --no-audit --no-fund && npm run build
