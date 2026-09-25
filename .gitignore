@@ -20,3 +20,6 @@ recovery-monitor-backend/uploads/
 .env.*
 .DS_Store
 .rocketride/
+
+# assembled locally by scripts/setup.sh from the committed parts
+model/weights/vlm_adapter/adapter_model.safetensors
