@@ -5,6 +5,7 @@ import SessionPlayer from '../components/SessionPlayer.jsx';
 import TrendChart from '../components/TrendChart.jsx';
 import UploadPanel from '../components/UploadPanel.jsx';
 import VoiceRecorder from '../components/VoiceRecorder.jsx';
+import PatientTutorials from '../components/PatientTutorials.jsx';
 import { exerciseName, prettyCondition } from '../exercises.js';
 import { Disclaimer, ErrorNote, Note, Panel, Stat } from '../components/ui.jsx';
 import { fmtDate, fmtDateTime, go, num, useLoad } from '../hooks.js';
@@ -52,6 +53,7 @@ export default function PatientHome({ patientId, view = 'today' }) {
       </header>
       <ErrorNote error={patient.error || history.error || intakes.error} />
       {view === 'care' && <CareTeam careTeam={careTeam.data} intakes={intakes.data} hasPlan={Boolean(carePlan)} />}
+      <PatientTutorials />
 
       {view === 'progress' && (
         <>
