@@ -443,6 +443,6 @@ recovery-monitor/
 
 **Recovery Monitor** · Edge AI SJSU Hackathon 2026 · built on the HP ZGX Nano
 
-Arya Mehta · Aishwarya Iyer · Prajwal
+Arya Mehta · Aishwarya Iyer · Prajwal · Om Dhankara · Keith Gonsalves
 
 </div>
