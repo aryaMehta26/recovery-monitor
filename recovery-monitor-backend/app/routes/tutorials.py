@@ -181,7 +181,7 @@ def tutorial_media(tutorial_id: str, request: Request):
     path = Path(tutorial["media_path"])
     if not path.is_file():
         raise HTTPException(404, "Tutorial media is not available")
-    return FileResponse(path, media_type="video/mp4", filename=f"{tutorial_id}.mp4")
+    return FileResponse(path, media_type="video/mp4", filename=f"{tutorial_id}.mp4", content_disposition_type="inline")
 
 
 @router.get("/patient/tutorials")

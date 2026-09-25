@@ -193,6 +193,13 @@ def test_request_changes_notes_are_saved_and_returned(monkeypatch, client):
 
 
 def test_media_generation_is_local_and_patient_gated(monkeypatch, client, tiny_video):
+    from app import media as media_module
+
+    # Keep this test focused on the no-TTS fallback even when the developer
+    # machine has an optional local Piper model installed.
+    monkeypatch.setattr(media_module, "_piper_command", lambda: None)
+    monkeypatch.setattr(media_module, "_piper_model", lambda: None)
+    monkeypatch.setattr(media_module, "_tts_command", lambda: None)
     _, session_id, reference_id = _source(client, "media")
     with db.tx() as c:
         c.execute("UPDATE reference_videos SET path=? WHERE id=?", (str(tiny_video), reference_id))
@@ -217,6 +224,9 @@ def test_media_generation_is_local_and_patient_gated(monkeypatch, client, tiny_v
     ready = client.get(f"/api/tutorials/{draft['id']}").json()
     assert ready["media"]["status"] == "ready"
     assert ready["media"]["voice_status"] == "unavailable"
+    therapist_preview = client.get(f"/api/tutorials/{draft['id']}/media")
+    assert therapist_preview.status_code == 200
+    assert therapist_preview.headers["content-type"].startswith("video/mp4")
 
     approved = client.post(f"/api/tutorials/{draft['id']}/approve", json={"notes": "Media reviewed"})
     assert approved.status_code == 200

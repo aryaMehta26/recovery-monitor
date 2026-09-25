@@ -79,9 +79,6 @@ export const api = {
 
   reviewQueue: () => request('/api/review-queue'),
   review: (sessionId, data) => request(`/api/sessions/${sessionId}/review`, json('POST', data)),
-<<<<<<< HEAD
-  referenceVideos: () => request('/api/reference-videos'),
-=======
   referenceVideos: (exercise = 'squat') => request(`/api/reference-videos?exercise=${encodeURIComponent(exercise)}`),
   sessionTutorials: (sessionId) => request(`/api/sessions/${sessionId}/tutorials`),
   createTutorial: (sessionId, referenceVideoId) => request(`/api/sessions/${sessionId}/tutorials`, json('POST', { reference_video_id: referenceVideoId })),
@@ -90,7 +87,7 @@ export const api = {
   approveTutorial: (id, notes = '') => request(`/api/tutorials/${id}/approve`, json('POST', { notes })),
   requestTutorialChanges: (id, notes = '') => request(`/api/tutorials/${id}/request-changes`, json('POST', { notes })),
   patientTutorials: () => request('/api/patient/tutorials'),
->>>>>>> 1c54e66 (feat: add AI tutorial review and delivery UI)
+
 };
 
 // Live analysis progress over Server-Sent Events. Returns a function that stops listening.
