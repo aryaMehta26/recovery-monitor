@@ -179,6 +179,11 @@ def test_authenticated_patient_therapist_intake_flow(client):
         "supported_exercises": ["squat"],
     }).status_code == 200
 
+    # The request was auto-assigned to the demo therapist (the only match when it was sent). Declining passes it
+    # on to the next matching therapist.
+    login(client)
+    assert client.post(f"/api/therapist/intakes/{intake_id}/decline").status_code == 200
+    login(client, "workflow-therapist@example.com", "development-password")
     requests = client.get("/api/therapist/intakes").json()
     assert any(item["id"] == intake_id for item in requests)
     accepted = client.post(f"/api/therapist/intakes/{intake_id}/claim")
@@ -254,3 +259,31 @@ def test_approved_plan_becomes_the_patients_protocol(client):
     assert client.post(f"/api/therapist/plans/{plan['id']}/approve", json={}).status_code == 200
     proto = client.get(f"/api/patients/{pat['id']}/protocol").json()
     assert proto["exercise"] == "arm_abduction" and proto["target_reps"] == 8 and proto["pain_threshold"] == 4
+
+
+def test_ai_intake_is_auto_assigned_with_note(client, monkeypatch):
+    from app import intake_ai
+
+    # No LLM in tests: the rule-based fallback still produces a request, and the guards still apply.
+    monkeypatch.setattr(intake_ai, "LLM_URL", "http://127.0.0.1:9")
+    client.cookies.clear()
+    pat = client.post("/api/auth/signup", json={"email": "voice-patient@example.com", "password": "development-password",
+                                                "role": "patient"}).json()["user"]
+    client.put("/api/onboarding/patient", json={"name": "Voice Patient", "affected_areas": ["knee"],
+                                                "consent_local_analysis": True})
+    said = "My knee hurts on the stairs, about a six out of 10, for two months. I want to get back to football."
+    ai = client.post("/api/patient/intakes/assist", data={"text": said, "areas": '["knee"]'}).json()
+    assert ai["affected_areas"] == ["knee"] and ai["pain_score"] == 6 and ai["duration"] == "one_to_three_months"
+    assert ai["suggested_exercise"] in {"squat", "leg_lunge", "leg_abduction"}
+    intake = client.post("/api/patient/intakes", json={
+        "affected_areas": ai["affected_areas"], "issue_types": ["pain_during_movement"], "pain_score": 6,
+        "duration": ai["duration"], "trend": "getting_worse", "goals": ["return_to_sport"],
+        "voice_transcript": said, "ai": ai}).json()
+    assert intake["status"] == "assigned" and intake["assigned_therapist_id"]
+    login(client)  # the demo therapist covers every area and has no other load here
+    mine = {i["id"]: i for i in client.get("/api/therapist/intakes").json()}
+    assert mine[intake["id"]]["ai"]["summary_for_therapist"] and mine[intake["id"]]["voice_transcript"] == said
+    # The patient now exists for the care-team pages, so the therapist can set a plan straight away.
+    assert client.get(f"/api/patients/{pat['id']}").status_code == 200
+    assert client.post(f"/api/patients/{pat['id']}/protocol", json={"exercise": "squat", "target_reps": 10,
+                       "target_depth_deg": 100, "pain_threshold": 5}).status_code == 201

@@ -1,15 +1,15 @@
-import { Activity, ArrowRight, CalendarCheck, CheckCircle2, Clock3, MessageSquareText, PlayCircle, ShieldCheck, Trash2 } from 'lucide-react';
+import { Activity, ArrowRight, CalendarCheck, Check, CheckCircle2, MessageSquareText, Mic, PlayCircle, ShieldCheck, Sparkles, Trash2, UserRoundPlus } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../api.js';
 import SessionPlayer from '../components/SessionPlayer.jsx';
 import TrendChart from '../components/TrendChart.jsx';
 import UploadPanel from '../components/UploadPanel.jsx';
 import VoiceRecorder from '../components/VoiceRecorder.jsx';
-import { exerciseName } from '../exercises.js';
+import { exerciseName, prettyCondition } from '../exercises.js';
 import { Disclaimer, ErrorNote, Note, Panel, Stat } from '../components/ui.jsx';
 import { fmtDate, fmtDateTime, go, num, useLoad } from '../hooks.js';
 
-export default function PatientHome({ patientId }) {
+export default function PatientHome({ patientId, view = 'today' }) {
   const patient = useLoad(() => api.patient(patientId), [patientId]);
   const history = useLoad(() => api.patientSessions(patientId), [patientId]);
   const latestId = history.data?.length ? history.data[history.data.length - 1].id : null;
@@ -20,6 +20,8 @@ export default function PatientHome({ patientId }) {
 
   const protocol = patient.data?.protocol;
   const approvedIntake = intakes.data?.find((intake) => intake.status === 'approved' && intake.plan);
+  const pendingIntake = intakes.data?.some((intake) => ['pending', 'assigned', 'under_review'].includes(intake.status));
+  const openIntake = intakes.data?.[0];
   const carePlan = protocol ?? approvedIntake?.plan;
   const refVideo = refs.data?.find((r) => r.id === (latest.data?.review?.reference_video_id ?? carePlan?.reference_video_id));
   const refresh = () => {
@@ -42,20 +44,40 @@ export default function PatientHome({ patientId }) {
     <div className="page patient-dashboard">
       <header className="page-heading patient-heading">
         <div>
-          <span className="eyebrow">Patient dashboard</span>
-          <h1>Hi {patient.data?.name?.split(' ')[0] ?? ''}</h1>
-          <p className="page-subtitle">{patient.data?.condition}</p>
+          <span className="eyebrow">{{ today: 'Today', progress: 'My progress', care: 'My care team' }[view]}</span>
+          <h1>{view === 'today' ? `Hi ${patient.data?.name?.split(' ')[0] ?? ''}` : view === 'progress' ? 'Your progress' : 'Your care team'}</h1>
+          <p className="page-subtitle">{prettyCondition(patient.data?.condition)}</p>
         </div>
         <div className={`patient-status ${needsReview ? 'review' : ''}`}><span /> {status}</div>
       </header>
       <ErrorNote error={patient.error || history.error || intakes.error} />
-      <Panel title="Your therapist" subtitle="Your care connection" className="care-team-panel">
-        {careTeam.data?.therapist ? <div className="care-team-person"><strong>{careTeam.data.therapist.name}</strong><span>{careTeam.data.therapist.email}</span><small>Your therapist can review your movement and approve plans.</small></div> : <Note>Your therapist will appear here after someone accepts your care request.</Note>}
-      </Panel>
+      {view === 'care' && <CareTeam careTeam={careTeam.data} intakes={intakes.data} hasPlan={Boolean(carePlan)} />}
 
-      {approvedIntake?.plan && !protocol && <Panel title="Therapist-approved plan" subtitle="Your therapist has approved this plan from your request."><div className="approved-plan-summary"><strong>{exerciseName(approvedIntake.plan.exercise)}</strong><span>{approvedIntake.plan.target_sets} sets · {approvedIntake.plan.target_reps} repetitions · pain alert at {approvedIntake.plan.pain_threshold}/10</span>{approvedIntake.plan.instructions && <small>{approvedIntake.plan.instructions}</small>}</div></Panel>}
-      {intakes.data?.some((intake) => intake.status === 'pending') && !approvedIntake && <Note>Your therapist request is waiting for a therapist to review it.</Note>}
+      {view === 'progress' && (
+        <>
+          <Panel title="Your progress" subtitle="From your analysed sessions">
+            <TrendChart sessions={history.data} targetDepth={carePlan?.target_depth_deg} />
+          </Panel>
+          <Panel title="All sessions" subtitle={`${completedSessions} analysed`}>
+            <SessionHistory sessions={history.data} />
+          </Panel>
+        </>
+      )}
 
+      {view === 'today' && !carePlan && (
+        <div className="next-card">
+          <span className="ai-avatar"><Sparkles size={18} /></span>
+          <div>
+            <strong>{openIntake ? (openIntake.assigned_therapist_id ? `${careTeam.data?.therapist?.name || 'Your physiotherapist'} is preparing your plan` : 'Your request is waiting for a physiotherapist') : 'Tell us what’s going on'}</strong>
+            <p>{openIntake ? 'Your exercises will appear here as soon as your plan is ready.' : 'Describe your problem to our assistant in your own words. It prepares a request for a physiotherapist who covers that area.'}</p>
+          </div>
+          <button className="primary-button" onClick={() => go(openIntake ? `/patient/${patientId}/care` : '/patient/intake')}>
+            {openIntake ? 'See my request' : 'Ask the AI assistant'} <ArrowRight size={15} />
+          </button>
+        </div>
+      )}
+
+      {view === 'today' && (<>
       <section className="patient-overview" aria-label="Your recovery overview">
         <div className="overview-card overview-next">
           <div className="overview-icon"><Activity size={17} /></div>
@@ -101,7 +123,12 @@ export default function PatientHome({ patientId }) {
                 )}
               </div>
               {carePlan.tempo && <p className="plan-line"><CalendarCheck size={14} /> {carePlan.tempo}</p>}
-              {carePlan.notes && <p className="plan-line"><MessageSquareText size={14} /> {carePlan.notes}</p>}
+              {carePlan.notes && (
+                <div className="physio-note">
+                  <span className="mini-label"><MessageSquareText size={13} /> From {careTeam.data?.therapist?.name || carePlan.approved_by || 'your physiotherapist'}</span>
+                  <p>{carePlan.notes}</p>
+                </div>
+              )}
               {refVideo && (
                 <div className="reference">
                   <span className="mini-label"><PlayCircle size={13} /> How it should look: {refVideo.title}</span>
@@ -115,15 +142,12 @@ export default function PatientHome({ patientId }) {
         </Panel>
 
         <Panel title="Record today's session" subtitle="Your video is analysed on this device only">
-          <UploadPanel patientId={patientId} onDone={refresh} />
+          <UploadPanel patientId={patientId} onDone={refresh} exercise={carePlan?.exercise} />
         </Panel>
       </div>
 
       {latest.data && <LatestSession session={latest.data} patientId={patientId} refVideo={refVideo} onSaved={refresh} />}
-
-      <Panel title="Your progress" subtitle="From your analysed sessions">
-        <TrendChart sessions={history.data} targetDepth={carePlan?.target_depth_deg} />
-      </Panel>
+      </>)}
       <Disclaimer />
     </div>
   );
@@ -255,7 +279,7 @@ function CheckIn({ patientId, sessionId, onSaved }) {
         ))}
       </div>
       <div className="pain-labels"><span>No pain</span><span>Worst pain</span></div>
-      <label className="check"><input type="checkbox" checked={stiff} onChange={(e) => setStiff(e.target.checked)} /> My knee felt stiff</label>
+      <label className="check"><input type="checkbox" checked={stiff} onChange={(e) => setStiff(e.target.checked)} /> It felt stiff</label>
       <VoiceRecorder patientId={patientId} sessionId={sessionId} onTranscript={setTranscript} />
       {transcript && (
         <label className="field">
@@ -270,5 +294,77 @@ function CheckIn({ patientId, sessionId, onSaved }) {
       </button>
       <ErrorNote error={state.error} />
     </div>
+  );
+}
+
+const AREA_LABEL = { knee: 'Knee', hip: 'Hip', back_core: 'Back', ankle_foot: 'Ankle / foot', shoulder_arm: 'Shoulder / arm',
+  elbow_forearm: 'Elbow', wrist_hand: 'Wrist / hand', general_mobility: 'General mobility', other: 'Other' };
+
+// Where the patient's care request is: sent -> matched -> accepted -> plan ready.
+function CareTeam({ careTeam, intakes, hasPlan }) {
+  const intake = intakes?.[0];
+  const therapist = careTeam?.therapist ?? intake?.therapist;
+  const accepted = intake && ['under_review', 'plan_drafted', 'approved', 'changes_requested'].includes(intake.status);
+  const steps = intake ? [
+    ['Request sent', fmtDateTime(intake.created_at), true],
+    ['Matched with a physiotherapist', therapist ? (therapist.name || therapist.email) : 'Looking for a physiotherapist who covers this area', Boolean(intake.assigned_therapist_id)],
+    ['Accepted', accepted ? 'Your physiotherapist took on your care' : 'Waiting for them to accept', accepted || hasPlan],
+    ['Plan ready', hasPlan ? 'Your exercises are on your Today page' : 'Your physiotherapist will set your exercises', hasPlan],
+  ] : [];
+  return (
+    <>
+      <Panel title="Your physiotherapist" className="care-team-panel"
+        action={<button type="button" className="secondary-button" onClick={() => go('/patient/intake')}><UserRoundPlus size={15} /> New request</button>}>
+        {therapist ? (
+          <div className="care-person">
+            <span className="account-avatar therapist big">{(therapist.name || therapist.email).split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}</span>
+            <div><strong>{therapist.name || therapist.email}</strong><span>{therapist.email}</span></div>
+          </div>
+        ) : <Note>{intake ? 'We are matching you with a physiotherapist who covers this area.' : 'You haven’t asked for help yet. Tell our assistant what’s going on to get matched with a physiotherapist.'}</Note>}
+      </Panel>
+
+      {intake && (
+        <Panel title="Your request" subtitle={intake.affected_areas.map((a) => AREA_LABEL[a] ?? a).join(' · ') + ` · pain ${intake.pain_score}/10`}>
+          <ol className="timeline">
+            {steps.map(([label, detail, done], i) => {
+              const current = !done && (i === 0 || steps[i - 1][2]);
+              return (
+                <li key={label} className={done ? 'done' : current ? 'now' : ''}>
+                  <span className="tl-dot">{done && <Check size={12} strokeWidth={3} />}</span>
+                  <div><strong>{label}</strong><small>{detail}</small></div>
+                </li>
+              );
+            })}
+          </ol>
+          {intake.ai?.summary_for_therapist && (
+            <div className="told-us">
+              <span className="mini-label"><Sparkles size={13} /> What your physiotherapist sees</span>
+              <p>{intake.ai.summary_for_therapist}</p>
+              {intake.voice_transcript && <blockquote><Mic size={13} /> “{intake.voice_transcript}”</blockquote>}
+            </div>
+          )}
+        </Panel>
+      )}
+    </>
+  );
+}
+
+function SessionHistory({ sessions }) {
+  if (!sessions?.length) return <p className="muted small">No sessions yet. Record your first one from the Today page.</p>;
+  return (
+    <table className="table">
+      <thead><tr><th>Date</th><th>Exercise</th><th>Reps</th><th>Pain</th><th>Physio</th></tr></thead>
+      <tbody>
+        {sessions.slice().reverse().map((x) => (
+          <tr key={x.id}>
+            <td>{fmtDateTime(x.created_at)}</td>
+            <td>{exerciseName(x.exercise)}</td>
+            <td>{x.repetitions ?? '—'}</td>
+            <td>{x.pain_score != null ? `${x.pain_score}/10` : '—'}</td>
+            <td>{x.review ? (x.review.decision === 'approve' ? 'Approved' : 'Asked for changes') : x.stage === 'done' ? 'Waiting' : 'Analysing'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

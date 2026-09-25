@@ -1,5 +1,6 @@
 import { Camera, CircleStop, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { filmingTip } from '../exercises.js';
 import { api, followSession } from '../api.js';
 import { ErrorNote, Note } from './ui.jsx';
 
@@ -14,7 +15,7 @@ const STAGES = {
 };
 
 // Record in the browser (camera) or upload a file, then follow the on-device analysis live.
-export default function UploadPanel({ patientId, onDone }) {
+export default function UploadPanel({ patientId, onDone, exercise }) {
   const [mode, setMode] = useState('idle'); // idle | camera | recording | selected | uploading | processing
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState(null);
@@ -136,7 +137,7 @@ export default function UploadPanel({ patientId, onDone }) {
       {(mode === 'camera' || mode === 'recording') && (
         <div className="camera">
           <video ref={preview} autoPlay muted playsInline />
-          <div className="camera-guide">Stand side-on to the camera, whole body in frame</div>
+          <div className="camera-guide">{filmingTip(exercise).split(". ")[0].replace(/\.$/, "")}</div>
           {countdown > 0 && <div className="countdown">{countdown}</div>}
           <div className="camera-actions">
             {mode === 'camera' && countdown === 0 && (
@@ -163,8 +164,7 @@ export default function UploadPanel({ patientId, onDone }) {
 
       {mode === 'idle' && (
         <>
-          <Note>Film from the side with your whole body in frame. Knee angles are measured accurately from the side
-            (about ±5°); from other angles they are much less reliable.</Note>
+          <Note>{filmingTip(exercise)}</Note>
           <div className="upload-actions">
             <button className="primary-button" onClick={openCamera}><Camera size={15} /> Record with camera</button>
             <button className="secondary-button" onClick={() => fileInput.current.click()}><Upload size={15} /> Upload a video</button>

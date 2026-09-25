@@ -49,4 +49,7 @@ if DIST.exists():
         if path.startswith("api/"):
             raise HTTPException(404, "Not found")
         f = DIST / path
-        return FileResponse(f if path and f.is_file() else DIST / "index.html")
+        if path and f.is_file():
+            return FileResponse(f)
+        # Never cache the page itself: after a rebuild it must point at the new asset files.
+        return FileResponse(DIST / "index.html", headers={"Cache-Control": "no-cache"})

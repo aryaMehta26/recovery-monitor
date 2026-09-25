@@ -177,7 +177,21 @@ def conn() -> sqlite3.Connection:
         _conn.execute("PRAGMA foreign_keys = ON")
         _conn.execute("PRAGMA journal_mode = WAL")
         _conn.executescript(SCHEMA)
+        _migrate(_conn)
     return _conn
+
+
+# Columns added after the first release; existing databases get them on startup.
+ADDED_COLUMNS = {"patient_intakes": {"voice_transcript": "TEXT", "ai_json": "TEXT"}}
+
+
+def _migrate(c: sqlite3.Connection) -> None:
+    for table, cols in ADDED_COLUMNS.items():
+        have = {r[1] for r in c.execute(f"PRAGMA table_info({table})")}
+        for name, kind in cols.items():
+            if name not in have:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
+    c.commit()
 
 
 @contextmanager

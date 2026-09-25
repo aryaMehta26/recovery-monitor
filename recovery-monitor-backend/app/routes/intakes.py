@@ -1,9 +1,10 @@
 """Patient issue intake and therapist-approved exercise-plan workflow."""
 
+import asyncio
 import json
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from app import db
@@ -29,6 +30,8 @@ class IntakeIn(BaseModel):
     limitations: list[str] = Field(default_factory=list, max_length=10)
     goals: list[str] = Field(min_length=1, max_length=10)
     notes: str | None = Field(None, max_length=2000)
+    voice_transcript: str | None = Field(None, max_length=5000)
+    ai: dict | None = None  # the AI intake assistant's structured summary, as reviewed by the patient
 
 
 class PlanIn(BaseModel):
@@ -56,9 +59,13 @@ def _intake(row: dict) -> dict:
     result = dict(row)
     for key in ("affected_areas_json", "issue_types_json", "when_it_happens_json", "limitations_json", "goals_json"):
         result[key.removesuffix("_json")] = json.loads(result.pop(key))
+    result["ai"] = json.loads(result.pop("ai_json") or "null")
     plan = db.one("SELECT * FROM plan_drafts WHERE intake_id=? ORDER BY created_at DESC LIMIT 1", row["id"])
     result["plan"] = plan
     result["patient"] = db.one("SELECT u.id, u.email, pp.name FROM users u LEFT JOIN patient_profiles pp ON pp.user_id=u.id WHERE u.id=?", row["patient_user_id"])
+    result["therapist"] = row["assigned_therapist_id"] and db.one(
+        "SELECT u.id, u.email, tp.name FROM users u LEFT JOIN therapist_profiles tp ON tp.user_id=u.id WHERE u.id=?",
+        row["assigned_therapist_id"])
     return result
 
 
@@ -83,6 +90,55 @@ def _accessible_to(user_id: str, row: dict) -> bool:
     )
 
 
+def _ensure_patient_record(c, patient_user_id: str) -> None:
+    """The care-team pages (patient list, plan editor, sessions) work on the patients table."""
+    prof = c.execute("SELECT name FROM patient_profiles WHERE user_id=?", (patient_user_id,)).fetchone()
+    c.execute("INSERT OR IGNORE INTO patients (id,name,condition,created_at) VALUES (?,?,?,?)",
+              (patient_user_id, prof["name"] if prof and prof["name"] else patient_user_id, None, db.now()))
+
+
+def _pick_therapist(areas: list[str], exclude: set[str] = frozenset()) -> str | None:
+    """Matching specialisation, fewest patients currently assigned; ties go to the longest-registered therapist."""
+    row = {"affected_areas_json": json.dumps(areas)}
+    best = None
+    for t in db.all_("SELECT id FROM users WHERE role='therapist' ORDER BY created_at"):
+        if t["id"] in exclude or not _matches_specialization(t["id"], row):
+            continue
+        load = db.one("SELECT COUNT(*) n FROM patient_intakes WHERE assigned_therapist_id=?", t["id"])["n"]
+        if best is None or load < best[1]:
+            best = (t["id"], load)
+    return best[0] if best else None
+
+
+@router.post("/patient/intakes/assist")
+async def intake_assist(request: Request, audio: UploadFile | None = File(None), text: str = Form(""),
+                        areas: str = Form("[]")):
+    """Voice (or typed) description -> Whisper transcript -> structured request + a reply for the patient."""
+    user = current_user(request)
+    if user["role"] != "patient":
+        raise HTTPException(403, "Patient account required")
+    from app import intake_ai
+    from app.config import DATA_DIR
+    from app.routes.sessions import _transcribe
+
+    transcript = ""
+    if audio is not None:
+        folder = DATA_DIR / "intake_audio" / user["id"]
+        folder.mkdir(parents=True, exist_ok=True)
+        raw = folder / f"{uuid.uuid4().hex[:10]}.webm"
+        raw.write_bytes(await audio.read())
+        transcript = (await asyncio.to_thread(_transcribe, raw))["text"].strip()
+    words = " ".join(filter(None, [text.strip(), transcript]))
+    if len(words) < 3:
+        raise HTTPException(422, "We could not hear anything. Try again a little closer to the microphone, or type it.")
+    try:
+        ticked = json.loads(areas)
+    except ValueError:
+        ticked = []
+    result = await asyncio.to_thread(intake_ai.assist, words, ticked)
+    return {"transcript": transcript, "text": words, **result}
+
+
 @router.post("/patient/intakes", status_code=201)
 def create_intake(body: IntakeIn, request: Request):
     user = current_user(request)
@@ -92,13 +148,17 @@ def create_intake(body: IntakeIn, request: Request):
         raise HTTPException(409, "Complete patient onboarding first")
     intake_id = f"intake-{uuid.uuid4().hex[:12]}"
     now = db.now()
+    therapist = _pick_therapist(body.affected_areas)
     with db.tx() as c:
         c.execute("INSERT INTO patient_intakes (id,patient_user_id,affected_areas_json,issue_types_json,when_it_happens_json,"
-                  "pain_score,duration,trend,limitations_json,goals_json,notes,status,created_at,updated_at) "
-                  "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                  "pain_score,duration,trend,limitations_json,goals_json,notes,status,assigned_therapist_id,"
+                  "voice_transcript,ai_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                   (intake_id, user["id"], _json(body.affected_areas), _json(body.issue_types), _json(body.when_it_happens),
                    body.pain_score, body.duration, body.trend, _json(body.limitations), _json(body.goals), body.notes,
-                   "pending", now, now))
+                   "assigned" if therapist else "pending", therapist, body.voice_transcript,
+                   _json(body.ai) if body.ai else None, now, now))
+        if therapist:
+            _ensure_patient_record(c, user["id"])
     return _intake(db.one("SELECT * FROM patient_intakes WHERE id=?", intake_id))
 
 
@@ -220,6 +280,7 @@ def claim_intake(intake_id: str, request: Request):
         raise HTTPException(403, "This request does not match your specialization")
     with db.tx() as c:
         c.execute("UPDATE patient_intakes SET assigned_therapist_id=?, status='under_review', updated_at=? WHERE id=?", (user["id"], db.now(), intake_id))
+        _ensure_patient_record(c, intake["patient_user_id"])
         c.execute("INSERT OR REPLACE INTO therapist_intake_decisions (intake_id,therapist_user_id,decision,created_at) VALUES (?,?,?,?)", (intake_id, user["id"], "accepted", db.now()))
     return _intake(db.one("SELECT * FROM patient_intakes WHERE id=?", intake_id))
 
@@ -227,8 +288,19 @@ def claim_intake(intake_id: str, request: Request):
 def decline_intake(intake_id: str, request: Request):
     user = current_user(request)
     _therapist(user)
-    if not db.one("SELECT id FROM patient_intakes WHERE id=?", intake_id):
+    intake = db.one("SELECT * FROM patient_intakes WHERE id=?", intake_id)
+    if not intake:
         raise HTTPException(404, "No such intake")
     with db.tx() as c:
         c.execute("INSERT OR REPLACE INTO therapist_intake_decisions (intake_id,therapist_user_id,decision,created_at) VALUES (?,?,?,?)", (intake_id, user["id"], "declined", db.now()))
+    if intake["assigned_therapist_id"] == user["id"]:
+        # Pass the request on to the next matching therapist who has not declined it (or back to the open pool).
+        declined = {r["therapist_user_id"] for r in db.all_(
+            "SELECT therapist_user_id FROM therapist_intake_decisions WHERE intake_id=? AND decision='declined'", intake_id)}
+        nxt = _pick_therapist(json.loads(intake["affected_areas_json"]), declined)
+        with db.tx() as c:
+            c.execute("UPDATE patient_intakes SET assigned_therapist_id=?, status=?, updated_at=? WHERE id=?",
+                      (nxt, "assigned" if nxt else "pending", db.now(), intake_id))
+            if nxt:
+                _ensure_patient_record(c, intake["patient_user_id"])
     return {"id": intake_id, "decision": "declined"}

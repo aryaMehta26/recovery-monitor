@@ -215,7 +215,7 @@ export default function PhysioSession({ sessionId }) {
             <Disclosure label={refId ? 'Reference video attached' : 'Attach a reference video'} openLabel="Reference video">
               <select aria-label="Reference video to send" value={refId} onChange={(e) => setRefId(e.target.value ? Number(e.target.value) : '')}>
                 <option value="">None</option>
-                {refs.data?.map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}
+                {refs.data?.filter((v) => v.exercise === (r?.exercise ?? s.exercise)).map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}
               </select>
             </Disclosure>
             {painHigh && (

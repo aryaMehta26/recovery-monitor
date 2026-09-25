@@ -9,3 +9,19 @@ export const EXERCISES = {
   seated_leg_extension: { name: 'Seated leg extension', one: 'leg extension', area: 'Lower body' },
 };
 export const exerciseName = (key) => EXERCISES[key]?.name ?? key ?? '—';
+
+// How to film each exercise (matches the analysis: which camera angle measures it reliably).
+export const FILMING = {
+  squat: 'Stand side-on to the camera with your whole body in frame. Knee angles are measured accurately from the side (about ±5°).',
+  leg_lunge: 'Stand side-on to the camera with your whole body in frame.',
+  leg_abduction: 'Face the camera so the sideways leg raise is visible, whole body in frame.',
+  arm_abduction: 'Face the camera so the sideways arm raise is visible, from your head to your hips.',
+  arm_vw: 'Face the camera with both arms fully in frame.',
+  push_ups: 'Place the camera to your side so your arms and body line are visible for the whole movement.',
+};
+export const filmingTip = (exercise) => FILMING[exercise] ?? FILMING.squat;
+
+const AREA_WORDS = { knee: 'Knee', hip: 'Hip', back_core: 'Back', ankle_foot: 'Ankle / foot', shoulder_arm: 'Shoulder / arm',
+  elbow_forearm: 'Elbow', wrist_hand: 'Wrist / hand', general_mobility: 'General mobility' };
+// Onboarding stores body areas as keys ("shoulder_arm, knee"); show them as words.
+export const prettyCondition = (text) => (text ? text.replace(/\b[a-z]+_[a-z_]+\b|\bknee\b|\bhip\b/g, (k) => AREA_WORDS[k] ?? k) : text);

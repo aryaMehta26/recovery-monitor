@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Activity, ArrowRight, BarChart3, Check, ClipboardList, HeartPulse, LockKeyhole, ShieldCheck, Sparkles, UserRound } from 'lucide-react';
+import { Activity, ArrowRight, BarChart3, Check, ClipboardList, HeartPulse, Inbox, LockKeyhole, ShieldCheck, Sparkles, Stethoscope, TrendingUp, UserRound, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
 import rehabMotionPerson from './assets/rehab-motion-person.png';
@@ -28,6 +28,8 @@ export default function App() {
   const health = usePoll(() => api.health(), 5000);
   const queue = usePoll(() => (area === 'physio' || area === 'evaluation' || area === 'privacy' ? api.reviewQueue().catch(() => null) : Promise.resolve(null)), 10000, [area]);
   const me = useLoad(() => api.authMe(), [area]);
+  const intakes = usePoll(() => (me.data?.user?.role === 'therapist' ? api.therapistIntakes().catch(() => null) : Promise.resolve(null)), 10000, [me.data?.user?.role]);
+  const newRequests = (intakes.data ?? []).filter((i) => ['pending', 'assigned'].includes(i.status)).length;
   // Who is signed in, checked again on every page change. `checkedFor` makes sure a decision is only taken
   // after the check for THIS page finished (not from a stale answer before sign-in).
   const [auth, setAuth] = useState({ checkedFor: null, user: null });
@@ -39,7 +41,9 @@ export default function App() {
     return () => { alive = false; };
   }, [area]);
   const checked = auth.checkedFor === area;
-  const user = checked ? auth.user : me.data?.user;
+  // Only the check for THIS page counts: a stale answer (e.g. the previous account right after switching users)
+  // must never drive a redirect.
+  const user = checked ? auth.user : null;
 
   // Page guard (the server enforces the same rules): signed-out users go to sign-in, patients only see their
   // own portal, therapists use the care-team pages.
@@ -63,10 +67,10 @@ export default function App() {
   else if (area === 'onboarding' && a === 'patient') page = <PatientOnboarding />;
   else if (area === 'onboarding' && a === 'therapist') page = <TherapistOnboarding />;
   else if (area === 'patient' && a === 'intake') page = <PatientIntake />;
-  else if (area === 'patient' && (a || me.data?.user?.role === 'patient')) page = <PatientHome key={a ?? me.data.user.id} patientId={a ?? me.data.user.id} />;
+  else if (area === 'patient' && (a || me.data?.user?.role === 'patient')) page = <PatientHome key={`${a}-${b}`} patientId={a ?? me.data.user.id} view={['progress', 'care'].includes(b) ? b : 'today'} />;
   else if (area === 'physio' && a === 'session' && b) page = <PhysioSession key={b} sessionId={b} />;
   else if (area === 'physio' && a === 'patient' && b) page = <PhysioPatient key={b} patientId={b} />;
-  else if (area === 'physio') page = <PhysioQueue />;
+  else if (area === 'physio') page = <PhysioQueue key={a ?? 'queue'} view={['requests', 'patients'].includes(a) ? a : 'queue'} />;
   else if (area === 'evaluation') page = <Evaluation />;
   else if (area === 'privacy') page = <Privacy />;
   else page = <RolePicker user={me.data?.user} />;
@@ -74,16 +78,24 @@ export default function App() {
   // Keep the signed-in person's own section in the sidebar on the shared pages (Accuracy, Privacy) too.
   const role = area === 'patient' || area === 'physio' ? area
     : { therapist: 'physio', patient: 'patient' }[me.data?.user?.role] ?? null;
-  const patientRouteId = (area === 'patient' && a) || me.data?.user?.id;
+  const patientRouteId = (area === 'patient' && a && a !== 'intake' && a) || me.data?.user?.id;
+  const pa = area === 'patient';
   const nav = role === 'patient'
-    ? [[`/patient/${patientRouteId}`, 'My sessions', HeartPulse, area === 'patient']]
+    ? [[`/patient/${patientRouteId}`, 'Today', HeartPulse, pa && a !== 'intake' && !b, null, 'pink'],
+       [`/patient/${patientRouteId}/progress`, 'My progress', TrendingUp, pa && b === 'progress', null, 'blue'],
+       [`/patient/${patientRouteId}/care`, 'Care team', Stethoscope, pa && b === 'care', null, 'green'],
+       ['/patient/intake', 'Ask AI', Sparkles, pa && a === 'intake', null, 'violet']]
     : role === 'physio'
-      ? [['/physio', 'Review queue', ClipboardList, area === 'physio' && !a, queue.data?.length]]
+      ? [['/physio', 'Review queue', ClipboardList, area === 'physio' && (!a || a === 'session'), queue.data?.length, 'orange'],
+         ['/physio/requests', 'New requests', Inbox, area === 'physio' && a === 'requests', newRequests, 'violet'],
+         ['/physio/patients', 'Patients', Users, area === 'physio' && (a === 'patients' || a === 'patient'), null, 'blue']]
       : [];
   const h = health.data;
   const crumbs = area === 'physio'
-    ? [['Review queue', '/physio'], ...(a === 'session' ? [['Session review']] : a === 'patient' ? [['Patient']] : [])]
-    : area === 'patient' ? [['My recovery']]
+    ? (a === 'requests' ? [['New requests']] : a === 'patients' ? [['Patients']]
+      : a === 'patient' ? [['Patients', '/physio/patients'], ['Patient']]
+        : [['Review queue', '/physio'], ...(a === 'session' ? [['Session review']] : [])])
+    : area === 'patient' ? [[a === 'intake' ? 'Ask AI' : { progress: 'My progress', care: 'Care team' }[b] ?? 'Today']]
       : area === 'evaluation' ? [['Accuracy']] : area === 'privacy' ? [['Privacy']] : [['Recovery Monitor']];
 
   if (isAuthPage) return <div className="auth-shell">{page}</div>;
@@ -97,8 +109,7 @@ export default function App() {
           <span><strong>Recovery Monitor</strong><small>On-device rehab evidence</small></span>
         </button>
         {nav.length > 0 && <div className="nav-label">{role === 'patient' ? 'Patient' : 'Physiotherapist'}</div>}
-        {nav.length > 0 && <NavGroup items={nav.map(([path, label, Icon, active, count]) => (
-          { path, label, Icon, active, count, tint: role === 'patient' ? 'pink' : 'orange' }))} />}
+        {nav.length > 0 && <NavGroup items={nav.map(([path, label, Icon, active, count, tint]) => ({ path, label, Icon, active, count, tint }))} />}
         <div className="nav-label lower">About this system</div>
         <NavGroup items={[
           { path: '/evaluation', label: 'Accuracy', Icon: BarChart3, tint: 'blue', active: area === 'evaluation' },
@@ -110,7 +121,7 @@ export default function App() {
       </aside>
 
       <main className="main-shell">
-        <Topbar health={h} user={me.data?.user} crumbs={crumbs} />
+        <Topbar health={h} user={me.data?.user && { ...me.data.user, name: me.data.profile?.name }} crumbs={crumbs} />
         <div className="content">{page}</div>
       </main>
     </div>
