@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS reference_videos (
     title TEXT NOT NULL,
     path TEXT NOT NULL,
     source TEXT,
+    approval_status TEXT NOT NULL DEFAULT 'approved' CHECK (approval_status IN ('pending', 'approved', 'rejected')),
     created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sessions (
@@ -156,6 +157,29 @@ CREATE TABLE IF NOT EXISTS plan_approvals (
     notes TEXT,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS tutorials (
+    id TEXT PRIMARY KEY,
+    patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+    source_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    therapist_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    exercise TEXT NOT NULL,
+    target_reps INTEGER NOT NULL,
+    target_depth_deg REAL,
+    reference_video_id INTEGER NOT NULL REFERENCES reference_videos(id),
+    verified_findings_json TEXT NOT NULL,
+    coaching_cues_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    captions_json TEXT NOT NULL,
+    script TEXT NOT NULL,
+    generation_source TEXT NOT NULL,
+    validation_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'approved', 'request_changes')),
+    request_changes_notes TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    approved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS tutorials_patient_status ON tutorials(patient_id, status, created_at);
 CREATE TABLE IF NOT EXISTS therapist_intake_decisions (intake_id TEXT NOT NULL REFERENCES patient_intakes(id) ON DELETE CASCADE, therapist_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, decision TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (intake_id, therapist_user_id));
 CREATE INDEX IF NOT EXISTS sessions_patient ON sessions(patient_id, created_at);
 """
@@ -178,6 +202,15 @@ def conn() -> sqlite3.Connection:
         _conn.execute("PRAGMA journal_mode = WAL")
         _conn.executescript(SCHEMA)
         _migrate(_conn)
+        # Keep databases created before the tutorial workflow compatible. Existing
+        # reference videos retain the legacy behavior by becoming approved.
+        columns = {row[1] for row in _conn.execute("PRAGMA table_info(reference_videos)")}
+        if "approval_status" not in columns:
+            _conn.execute("ALTER TABLE reference_videos ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'approved'")
+        tutorial_columns = {row[1] for row in _conn.execute("PRAGMA table_info(tutorials)")}
+        if "request_changes_notes" not in tutorial_columns:
+            _conn.execute("ALTER TABLE tutorials ADD COLUMN request_changes_notes TEXT")
+        _conn.commit()
     return _conn
 
 

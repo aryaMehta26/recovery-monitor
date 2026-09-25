@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import db
 from app.config import AI_ENDPOINTS, CORS_ORIGINS, REPO_ROOT
 from app.guards import assert_local
-from app.routes import auth, intakes, legacy_api, patients, review, sessions, system
+from app.routes import auth, intakes, legacy_api, patients, review, sessions, system, tutorials
 
 
 @asynccontextmanager
@@ -36,7 +36,7 @@ app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_credentials
 
 # Order matters: legacy /api/sessions/{id}/check-in and /decision are more specific than nothing
 # in the new routers, and the new routers never define those exact paths.
-for r in (system.router, auth.router, auth.onboarding_router, intakes.router, patients.router, sessions.router, review.router, legacy_api.router):
+for r in (system.router, auth.router, auth.onboarding_router, intakes.router, patients.router, sessions.router, review.router, tutorials.router, legacy_api.router):
     app.include_router(r)
 
 # Serve the built UI (npm run build) from the same port, so the demo is one process.
