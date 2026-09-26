@@ -33,6 +33,13 @@ POSE="${RM_DATA:-$HOME/rm-data}/pose_models"; mkdir -p "$POSE"
 [ -f "$POSE/pose_landmarker_full.task" ] || curl -fsSL -o "$POSE/pose_landmarker_full.task" \
   https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task
 
+# Piper text-to-speech (tutorial voice-over), voice en_US-lessac-medium
+"$APP_VENV/bin/pip" install -q piper-tts
+VOICE="${RM_APP_DATA:-$HOME/rm-data/app8020}/tts/piper"; mkdir -p "$VOICE"
+for f in en_US-lessac-medium.onnx en_US-lessac-medium.onnx.json; do
+  [ -f "$VOICE/$f" ] || curl -fsSL -o "$VOICE/$f" "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/$f"
+done
+
 echo "== 5/5 frontend build"
 cd "$ROOT/recovery-monitor-frontend" && npm install --no-audit --no-fund && npm run build
 echo "Done. Start everything with: scripts/run_all.sh"
