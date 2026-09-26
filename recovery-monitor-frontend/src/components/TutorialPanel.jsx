@@ -1,6 +1,7 @@
 import { Check, FileText, RefreshCw, Save, Sparkles, Video, Volume2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { exerciseName } from '../exercises.js';
 import { ErrorNote, Panel } from './ui.jsx';
 import { useLoad } from '../hooks.js';
 
@@ -109,7 +110,7 @@ export default function TutorialPanel({ session, referenceVideos = [] }) {
   const mediaUrl = media?.url || null;
 
   return (
-    <Panel title={<><Sparkles size={16} /> AI exercise tutorial</>} subtitle="Text tutorial plus an approved reference video">
+    <Panel className="tutorial-wide" title={<><Sparkles size={16} /> AI exercise tutorial</>} subtitle="A personalised tutorial built from this session's verified evidence, with an optional local voice-over. The patient only sees it after you approve.">
       {tutorials.error && <ErrorNote error={tutorials.error} />}
       {!tutorial && (
         <>
@@ -132,7 +133,9 @@ export default function TutorialPanel({ session, referenceVideos = [] }) {
 
       {tutorial && form && (
         <div className="tutorial-editor">
-          <div className="tutorial-meta"><span className={`badge ${tutorial.status === 'approved' ? 'badge-green' : tutorial.status === 'request_changes' ? 'badge-amber' : 'badge-grey'}`}>{tutorial.status.replace('_', ' ')}</span><span className="muted small">{tutorial.exercise} · {tutorial.target_reps} repetitions{tutorial.target_depth_deg ? ` · ${tutorial.target_depth_deg}° depth` : ''}</span></div>
+          <div className="tutorial-meta"><span className={`badge ${tutorial.status === 'approved' ? 'badge-green' : tutorial.status === 'request_changes' ? 'badge-amber' : 'badge-grey'}`}>{tutorial.status.replace('_', ' ')}</span><span className="muted small">{exerciseName(tutorial.exercise)} · {tutorial.target_reps} repetitions{tutorial.target_depth_deg ? ` · ${tutorial.target_depth_deg}° depth` : ''}</span></div>
+          <div className="tutorial-grid">
+          <div className="tutorial-media">
           {referenceUrl && <div className="reference"><span className="mini-label"><Video size={13} /> Approved reference video: {reference?.title}</span><video src={referenceUrl} controls playsInline preload="metadata" /></div>}
           <div className="tutorial-media-controls">
             <label className="check"><input type="checkbox" checked={voiceEnabled} onChange={(event) => setVoiceEnabled(event.target.checked)} disabled={state.mediaSaving || media?.status === "queued" || media?.status === "processing"} /> <Volume2 size={14} /> Add local voice guidance</label>
@@ -144,7 +147,9 @@ export default function TutorialPanel({ session, referenceVideos = [] }) {
             {media?.voice_status === "unavailable" ? <p className="muted small">Video generated without voice guidance because no local TTS engine was available.</p> : null}
             {mediaUrl && <div className="reference"><span className="mini-label"><Video size={13} /> Generated tutorial preview</span><video src={mediaUrl} controls playsInline preload="metadata" /><a className="text-button" href={mediaUrl} download>Download tutorial video</a></div>}
           </div>
+          </div>
 
+          <div className="tutorial-fields">
           <label className="field"><span>Verified movement findings</span><textarea rows={3} value={form.verified_findings} onChange={(event) => edit('verified_findings', event.target.value)} disabled={!editing} /></label>
           <label className="field"><span>Personalized coaching cues <small>(one per line)</small></span><textarea rows={3} value={form.coaching_cues} onChange={(event) => edit('coaching_cues', event.target.value)} disabled={!editing} /></label>
           <label className="field"><span>Warnings <small>(one per line)</small></span><textarea rows={3} value={form.warnings} onChange={(event) => edit('warnings', event.target.value)} disabled={!editing} /></label>
@@ -157,6 +162,8 @@ export default function TutorialPanel({ session, referenceVideos = [] }) {
           </div>}
           {!editing && <p className="muted small"><FileText size={13} /> This approved tutorial is now available to the patient.</p>}
           <ErrorNote error={state.error} />
+          </div>
+          </div>
         </div>
       )}
     </Panel>

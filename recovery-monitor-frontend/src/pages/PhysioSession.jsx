@@ -239,9 +239,10 @@ export default function PhysioSession({ sessionId }) {
               Approving adds these reps to the patient's baseline.
             </p>
           </Panel>
-          <TutorialPanel session={s} referenceVideos={refs.data ?? []} />
         </div>
       </div>
+
+      <TutorialPanel session={s} referenceVideos={refs.data ?? []} />
     </div>
   );
 }
