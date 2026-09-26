@@ -103,3 +103,18 @@ def require_session_access(request: Request, session_id: str) -> dict:
     if not s:
         raise HTTPException(404, "No such session")
     return require_patient_access(request, s["patient_id"])
+
+
+def require_assigned_therapist_session(request: Request, session_id: str) -> dict:
+    """Require a therapist assigned to the session's patient through intake."""
+    user = require_therapist(request)
+    session = db.one("SELECT patient_id FROM sessions WHERE id = ?", session_id)
+    if not session:
+        raise HTTPException(404, "No such session")
+    assigned = db.one(
+        "SELECT 1 FROM patient_intakes WHERE patient_user_id=? AND assigned_therapist_id=?",
+        session["patient_id"], user["id"],
+    )
+    if not assigned:
+        raise HTTPException(403, "This patient is not assigned to you")
+    return user

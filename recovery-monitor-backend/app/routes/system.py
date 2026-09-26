@@ -82,7 +82,8 @@ def eval_summary():
 @router.get("/reference-videos")
 def list_reference_videos(request: Request, exercise: str | None = None):
     current_user(request)
-    rows = db.all_("SELECT * FROM reference_videos WHERE (? IS NULL OR exercise = ?) ORDER BY id", exercise, exercise)
+    rows = db.all_("SELECT * FROM reference_videos WHERE approval_status='approved' AND (? IS NULL OR exercise = ?) ORDER BY id",
+                   exercise, exercise)
     return [{**r, "url": f"/api/reference-videos/{r['id']}/video", "path": None} for r in rows]
 
 
@@ -90,7 +91,7 @@ def list_reference_videos(request: Request, exercise: str | None = None):
 def reference_video(video_id: int, request: Request):
     current_user(request)
     r = db.one("SELECT * FROM reference_videos WHERE id = ?", video_id)
-    if not r:
+    if not r or r["approval_status"] != "approved":
         raise HTTPException(404, "No such reference video")
     return FileResponse(r["path"], media_type="video/mp4")
 
@@ -110,6 +111,6 @@ async def add_reference_video(request: Request, video: UploadFile = File(...), t
         raise HTTPException(422, str(e)) from e
     raw.unlink(missing_ok=True)
     with db.tx() as c:
-        cur = c.execute("INSERT INTO reference_videos (exercise, title, path, source, created_at) VALUES (?,?,?,?,?)",
-                        (exercise, title, str(folder / "video.mp4"), source, db.now()))
+        cur = c.execute("INSERT INTO reference_videos (exercise, title, path, source, approval_status, created_at) VALUES (?,?,?,?,?,?)",
+                        (exercise, title, str(folder / "video.mp4"), source, "approved", db.now()))
     return {"id": cur.lastrowid, "title": title, "url": f"/api/reference-videos/{cur.lastrowid}/video"}

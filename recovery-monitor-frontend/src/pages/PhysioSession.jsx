@@ -5,12 +5,13 @@ import AiReport, { AGREEMENT } from '../components/AiReport.jsx';
 import RepList from '../components/RepList.jsx';
 import { exerciseName } from '../exercises.js';
 import SessionPlayer from '../components/SessionPlayer.jsx';
+import TutorialPanel from '../components/TutorialPanel.jsx';
 import { Disclosure, ErrorNote, Initials, Panel, Stat } from '../components/ui.jsx';
 import { fmtDateTime, go, num, pct, useLoad } from '../hooks.js';
 
 export default function PhysioSession({ sessionId }) {
   const session = useLoad(() => api.session(sessionId), [sessionId]);
-  const refs = useLoad(() => api.referenceVideos(), []);
+  const refs = useLoad(() => api.referenceVideos(session.data?.exercise ?? 'squat'), [session.data?.exercise]);
   const player = useRef(null);
   const [selected, setSelected] = useState(null);
   const [labels, setLabels] = useState({});
@@ -59,7 +60,7 @@ export default function PhysioSession({ sessionId }) {
       await api.review(sessionId, {
         decision, notes, rep_labels: clean, reference_video_id: refId || null, acknowledge_pain: ackPain,
       });
-      go('/physio');
+      if (decision === 'approve') { await session.reload(); setSubmit({ saving: false, error: null }); } else { go('/physio'); }
     } catch (error) {
       setSubmit({ saving: false, error });
     }
@@ -238,6 +239,7 @@ export default function PhysioSession({ sessionId }) {
               Approving adds these reps to the patient's baseline.
             </p>
           </Panel>
+          <TutorialPanel session={s} referenceVideos={refs.data ?? []} />
         </div>
       </div>
     </div>

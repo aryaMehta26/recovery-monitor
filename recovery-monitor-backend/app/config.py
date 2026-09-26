@@ -13,7 +13,8 @@ DATA_DIR = Path(os.getenv("RM_APP_DATA", BACKEND_DIR / "data"))
 DB_PATH = DATA_DIR / "recovery_monitor.sqlite3"
 VIDEO_DIR = DATA_DIR / "videos"
 REFERENCE_DIR = DATA_DIR / "reference_videos"
-for d in (DATA_DIR, VIDEO_DIR, REFERENCE_DIR):
+TUTORIAL_MEDIA_DIR = DATA_DIR / "tutorial_media"
+for d in (DATA_DIR, VIDEO_DIR, REFERENCE_DIR, TUTORIAL_MEDIA_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 MODEL_RESULTS = REPO_ROOT / "model" / "results"

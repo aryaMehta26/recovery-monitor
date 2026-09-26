@@ -106,6 +106,32 @@ def submit(session_id: str, raw_path: Path):
     return _pool.submit(run, session_id, raw_path)
 
 
+_media_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tutorial-media")
+
+
+def run_tutorial_media(tutorial_id: str, voice_enabled: bool = False) -> None:
+    with db.tx() as c:
+        c.execute("UPDATE tutorials SET media_status='processing', media_error=NULL, media_voice_enabled=?, "
+                  "media_voice_status=? WHERE id=?", (int(voice_enabled), "not_requested", tutorial_id))
+    try:
+        from app.media import render_tutorial_media
+
+        artifact, voice_status = render_tutorial_media(tutorial_id, voice_enabled)
+        with db.tx() as c:
+            c.execute("UPDATE tutorials SET media_status='ready', media_path=?, media_error=NULL, "
+                      "media_voice_status=?, media_generated_at=?, updated_at=? WHERE id=?",
+                      (str(artifact), voice_status, db.now(), db.now(), tutorial_id))
+    except Exception as error:  # noqa: BLE001 — media failure must be visible to the therapist
+        traceback.print_exc()
+        with db.tx() as c:
+            c.execute("UPDATE tutorials SET media_status='failed', media_error=?, updated_at=? WHERE id=?",
+                      (str(error)[:500], db.now(), tutorial_id))
+
+
+def submit_tutorial_media(tutorial_id: str, voice_enabled: bool = False):
+    return _media_pool.submit(run_tutorial_media, tutorial_id, voice_enabled)
+
+
 _report_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="report")
 
 
