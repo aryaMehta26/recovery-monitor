@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recovery Monitor — Interactive Architecture</title>
+  <style>
+    :root { --ink:#102b43; --muted:#6d8498; --line:#d8e5ef; --blue:#1976d2; --green:#1d9345; --purple:#7955c7; --orange:#d97818; --bg:#f5f8fb; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif; color:var(--ink); background:var(--bg); }
+    main { max-width:1320px; margin:auto; padding:34px 22px 50px; }
+    h1 { margin:0 0 8px; font-size:clamp(28px,4vw,48px); letter-spacing:-.04em; }
+    .intro { color:var(--muted); max-width:780px; font-size:18px; margin:0 0 26px; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:9px; margin-bottom:20px; }
+    button { font:inherit; cursor:pointer; border:1px solid var(--line); background:white; color:var(--ink); border-radius:999px; padding:9px 15px; }
+    button:hover, button.active { color:white; background:var(--blue); border-color:var(--blue); }
+    .diagram { background:white; border:1px solid var(--line); border-radius:24px; padding:26px; box-shadow:0 12px 35px #153b5b12; overflow:auto; }
+    .flow { min-width:1220px; display:grid; grid-template-columns:1fr 34px 1.1fr 34px 1.15fr 34px 1.05fr 34px 1fr; align-items:center; gap:12px; }
+    .node { min-height:140px; text-align:left; border:2px solid var(--line); border-radius:18px; padding:17px; background:#fff; transition:.2s; }
+    .node:hover, .node.selected { transform:translateY(-3px); box-shadow:0 8px 22px #153b5b20; border-color:var(--blue); }
+    .node h2 { font-size:18px; margin:0 0 8px; }
+    .node p { color:var(--muted); margin:0 0 9px; }
+    .node small { display:block; color:var(--blue); font-weight:700; }
+    .patient { border-top:5px solid var(--purple); }
+    .app { border-top:5px solid var(--blue); }
+    .ai { border-top:5px solid var(--green); }
+    .review { border-top:5px solid var(--orange); }
+    .arrow { text-align:center; color:var(--blue); font-size:28px; }
+    .privacy { margin-top:20px; padding:15px 18px; border-radius:14px; background:#e9f8ed; color:#176d34; border:1px solid #bfe6c8; }
+    .details { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:20px; }
+    .panel { background:white; border:1px solid var(--line); border-radius:18px; padding:20px; }
+    .panel h2 { margin:0 0 9px; font-size:21px; }
+    .panel p { color:var(--muted); }
+    ul { margin:10px 0 0; padding-left:22px; }
+    li { margin:6px 0; }
+    .legend { display:flex; flex-wrap:wrap; gap:14px; color:var(--muted); margin-top:20px; }
+    .dot { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:5px; }
+    @media (max-width:720px) { main { padding:22px 14px; } .details { grid-template-columns:1fr; } .diagram { padding:16px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Recovery Monitor architecture</h1>
+    <p class="intro">Click any layer to see what happens, what data moves through it, and where the privacy boundary is enforced.</p>
+
+    <div class="toolbar" aria-label="Architecture filters">
+      <button class="filter active" data-filter="all">All layers</button>
+      <button class="filter" data-filter="patient">Patient experience</button>
+      <button class="filter" data-filter="ai">On-device AI</button>
+      <button class="filter" data-filter="review">Therapist workflow</button>
+      <button class="filter" data-filter="privacy">Privacy boundary</button>
+    </div>
+
+    <section class="diagram" aria-label="Interactive system architecture">
+      <div class="flow">
+        <button class="node patient" data-id="patient" data-kind="patient">
+          <h2>Patient devices</h2><p>Browser or phone camera</p><small>Video · text · voice check-in</small>
+        </button>
+        <div class="arrow">→</div>
+        <button class="node app" data-id="frontend" data-kind="app">
+          <h2>Recovery Monitor UI</h2><p>React/Vite patient and therapist experiences</p><small>Auth · upload · dashboards</small>
+        </button>
+        <div class="arrow">→</div>
+        <button class="node ai" data-id="backend" data-kind="ai">
+          <h2>Local FastAPI service</h2><p>Sessions, plans, reviews, tutorials, authorization</p><small>SQLite · local files · job queue</small>
+        </button>
+        <div class="arrow">→</div>
+        <button class="node ai" data-id="models" data-kind="ai privacy">
+          <h2>HP ZGX Nano AI</h2><p>Pose, form, vision, speech, local LLM</p><small>No cloud AI</small>
+        </button>
+        <div class="arrow">→</div>
+        <button class="node review" data-id="review" data-kind="review">
+          <h2>Therapist approval</h2><p>Review evidence and personalize guidance</p><small>Approve · request changes · deliver</small>
+        </button>
+      </div>
+
+      <div class="privacy"><strong>Private device boundary:</strong> patient video, audio, transcript, analysis, and tutorial artifacts remain on the Nano. The therapist approval gate controls patient delivery.</div>
+
+      <div class="details">
+        <article class="panel" id="detail-panel">
+          <h2>Select a layer</h2><p>Choose a block above to inspect its responsibility.</p>
+        </article>
+        <article class="panel">
+          <h2>End-to-end flow</h2>
+          <ul>
+            <li>Patient records movement and describes symptoms.</li>
+            <li>Local models produce measurements and safety flags.</li>
+            <li>Therapist reviews evidence and approves a decision.</li>
+            <li>Local AI drafts a tutorial from verified facts.</li>
+            <li>FFmpeg/libass adds captions; Piper or espeak adds optional voice.</li>
+            <li>Patient sees only approved tutorials and media.</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="legend">
+        <span><i class="dot" style="background:var(--purple)"></i>Input</span>
+        <span><i class="dot" style="background:var(--blue)"></i>Application</span>
+        <span><i class="dot" style="background:var(--green)"></i>On-device AI</span>
+        <span><i class="dot" style="background:var(--orange)"></i>Human approval</span>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const details = {
+      patient: ['Patient devices', 'The patient uses a browser or phone camera to record an exercise and submits pain, stiffness, text, or an optional voice note.', ['Camera video remains local to the Nano', 'Patient sees plans, sessions, check-ins, and approved tutorials', 'Mobile access can use the private tailnet connection']],
+      frontend: ['React/Vite application', 'The frontend provides separate patient and therapist workflows and calls the local API through the Vite proxy.', ['Patient dashboard and recording flow', 'Therapist queue, review, plan, and tutorial panels', 'Approval state controls what the patient can see']],
+      backend: ['FastAPI and local data', 'The backend stores users, care relationships, sessions, reviews, reference videos, tutorial drafts, and rendered media.', ['Object-level therapist authorization', 'SQLite persistence and local video artifacts', 'Background jobs for analysis and media rendering']],
+      models: ['HP ZGX Nano AI runtime', 'Movement and language processing run on the edge device instead of a cloud service.', ['MediaPipe pose and exercise measurements', 'Exercise-specific XGBoost form models', 'Local vision model, Whisper, and local LLM', 'FFmpeg/libass plus Piper/espeak for tutorial media']],
+      review: ['Therapist approval gate', 'The therapist sees the evidence, reviews the AI draft, and decides what is safe to share with the patient.', ['Approve or request changes', 'Only approved tutorials are visible to patients', 'Reference videos must be approved before use', 'The therapist remains responsible for the care decision']],
+    };
+    const panel = document.querySelector('#detail-panel');
+    const nodes = [...document.querySelectorAll('.node')];
+    function select(node) {
+      nodes.forEach(n => n.classList.toggle('selected', n === node));
+      const [title, text, items] = details[node.dataset.id];
+      panel.innerHTML = `<h2>${title}</h2><p>${text}</p><ul>${items.map(item => `<li>${item}</li>`).join('')}</ul>`;
+    }
+    nodes.forEach(node => node.addEventListener('click', () => select(node)));
+    document.querySelectorAll('.filter').forEach(button => button.addEventListener('click', () => {
+      document.querySelectorAll('.filter').forEach(b => b.classList.remove('active'));
+      button.classList.add('active');
+      const filter = button.dataset.filter;
+      nodes.forEach(node => {
+        const visible = filter === 'all' || node.dataset.kind.includes(filter) || (filter === 'privacy' && node.dataset.kind.includes('privacy'));
+        node.style.opacity = visible ? '1' : '.28';
+      });
+    }));
+  </script>
+</body>
+</html>
