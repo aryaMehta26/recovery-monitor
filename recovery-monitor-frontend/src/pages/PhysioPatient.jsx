@@ -75,19 +75,29 @@ function ProtocolEditor({ patientId, protocol, refs, onSaved, suggested, areas =
     else setForm((f) => ({ ...f, exercise: suggested || f.exercise, reference_video_id: refFor(suggested || f.exercise) }));
   }, [protocol?.id, suggested, refs?.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === 'number' ? Number(e.target.value) : e.target.value }));
+  // Keep exactly what the therapist types (an emptied box stays empty); numbers are parsed on save.
+  const set = (k) => (e) => { const v = e.target.value; setForm((f) => ({ ...f, [k]: v })); };
   const choose = (ex) => setForm((f) => ({ ...f, exercise: ex, reference_video_id: refFor(ex) }));
   const recommended = new Set(areas.flatMap((a) => FITS[a] ?? []));
   const ordered = [...PLAN_EXERCISES].sort((x, y) => (y === suggested) - (x === suggested) || recommended.has(y) - recommended.has(x));
   const exRefs = refs?.filter((v) => v.exercise === form.exercise) ?? [];
   const ref = refs?.find((v) => v.id === Number(form.reference_video_id));
 
+  const int = (v, lo, hi) => { const n = Number(v); return v !== '' && Number.isInteger(n) && n >= lo && n <= hi ? n : null; };
+
   async function save() {
+    const reps = int(form.target_reps, 1, 100);
+    const pain = int(form.pain_threshold, 0, 10);
+    const depth = form.exercise === 'squat' ? int(form.target_depth_deg, 30, 175) : int(form.target_depth_deg, 30, 175) ?? 100;
+    const bad = reps == null ? 'Repetitions must be a whole number from 1 to 100.'
+      : pain == null ? 'Pain alert must be a whole number from 0 to 10.'
+        : depth == null ? 'Target depth must be between 30° and 175°.' : null;
+    if (bad) { setState({ saving: false, error: new Error(bad), saved: false }); return; }
     setState({ saving: true, error: null, saved: false });
     try {
       await api.setProtocol(patientId, {
-        exercise: form.exercise, target_reps: form.target_reps, target_depth_deg: form.target_depth_deg ?? 100,
-        pain_threshold: form.pain_threshold, tempo: form.tempo || null, notes: form.notes || null,
+        exercise: form.exercise, target_reps: reps, target_depth_deg: depth,
+        pain_threshold: pain, tempo: form.tempo || null, notes: form.notes || null,
         reference_video_id: form.reference_video_id ? Number(form.reference_video_id) : null,
       });
       setState({ saving: false, error: null, saved: true });
@@ -129,7 +139,7 @@ function ProtocolEditor({ patientId, protocol, refs, onSaved, suggested, areas =
       {ref && <video className="ref-preview" src={ref.url} controls muted playsInline preload="metadata" />}
       {form.exercise === 'squat' && <Note>Smaller knee angle = deeper squat.</Note>}
       <button className="primary-button" onClick={save} disabled={state.saving}><Save size={14} /> {state.saving ? 'Saving…' : protocol ? 'Save new plan version' : 'Send plan to patient'}</button>
-      {state.saved && <Note tone="ok">Sent. The patient sees this plan, your instructions and the video on their Today page.</Note>}
+      {state.saved && <Note tone="ok">Sent: {form.target_reps} × {EXERCISES[form.exercise]?.name.toLowerCase()}, pain alert at {form.pain_threshold}/10. The patient sees it, with your instructions and the video, on their Today page.</Note>}
       <ErrorNote error={state.error} />
     </div>
   );
