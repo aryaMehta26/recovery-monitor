@@ -55,7 +55,6 @@ export default function PatientHome({ patientId, view = 'today' }) {
       </header>
       <ErrorNote error={patient.error || history.error || intakes.error} />
       {view === 'care' && <CareTeam careTeam={careTeam.data} intakes={intakes.data} hasPlan={Boolean(carePlan)} />}
-      <PatientTutorials />
 
       {view === 'progress' && (
         <>
@@ -164,6 +163,7 @@ export default function PatientHome({ patientId, view = 'today' }) {
       </div>
 
       {latest.data && <LatestSession session={latest.data} patientId={patientId} refVideo={refVideo} onSaved={refresh} />}
+      <PatientTutorials />
       </>)}
       <Disclaimer />
     </div>

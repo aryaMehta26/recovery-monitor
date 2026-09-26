@@ -79,7 +79,8 @@ export const api = {
 
   reviewQueue: () => request('/api/review-queue'),
   review: (sessionId, data) => request(`/api/sessions/${sessionId}/review`, json('POST', data)),
-  referenceVideos: (exercise = 'squat') => request(`/api/reference-videos?exercise=${encodeURIComponent(exercise)}`),
+  // All six correct-form clips, or only one exercise's when given.
+  referenceVideos: (exercise) => request(exercise ? `/api/reference-videos?exercise=${encodeURIComponent(exercise)}` : '/api/reference-videos'),
   sessionTutorials: (sessionId) => request(`/api/sessions/${sessionId}/tutorials`),
   createTutorial: (sessionId, referenceVideoId) => request(`/api/sessions/${sessionId}/tutorials`, json('POST', { reference_video_id: referenceVideoId })),
   tutorial: (id) => request(`/api/tutorials/${id}`),
