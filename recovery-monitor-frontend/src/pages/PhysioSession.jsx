@@ -60,7 +60,7 @@ export default function PhysioSession({ sessionId }) {
       await api.review(sessionId, {
         decision, notes, rep_labels: clean, reference_video_id: refId || null, acknowledge_pain: ackPain,
       });
-      go('/physio');
+      if (decision === 'approve') { await session.reload(); setSubmit({ saving: false, error: null }); } else { go('/physio'); }
     } catch (error) {
       setSubmit({ saving: false, error });
     }

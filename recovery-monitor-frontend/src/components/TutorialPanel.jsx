@@ -1,4 +1,4 @@
-import { Check, FileText, RefreshCw, Save, Sparkles, Video } from 'lucide-react';
+import { Check, FileText, RefreshCw, Save, Sparkles, Video, Volume2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { ErrorNote, Panel } from './ui.jsx';
@@ -12,7 +12,8 @@ export default function TutorialPanel({ session, referenceVideos = [] }) {
   const [tutorial, setTutorial] = useState(null);
   const [referenceId, setReferenceId] = useState('');
   const [form, setForm] = useState(null);
-  const [state, setState] = useState({ saving: false, error: null });
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [state, setState] = useState({ saving: false, mediaSaving: false, error: null });
 
   useEffect(() => {
     const existing = tutorials.data?.[0];
@@ -38,6 +39,19 @@ export default function TutorialPanel({ session, referenceVideos = [] }) {
     });
   }
 
+  useEffect(() => {
+    if (!tutorial?.id || !['queued', 'processing'].includes(tutorial.media?.status)) return undefined;
+    const timer = window.setInterval(async () => {
+      try {
+        const updated = await api.tutorial(tutorial.id);
+        setTutorial(updated);
+      } catch (error) {
+        setState((current) => ({ ...current, error }));
+      }
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [tutorial?.id, tutorial?.media?.status]);
+
   function edit(key, value) {
     setForm((current) => ({ ...current, [key]: value }));
   }
@@ -53,6 +67,17 @@ export default function TutorialPanel({ session, referenceVideos = [] }) {
       return;
     }
     setState({ saving: false, error: null });
+  }
+
+  async function generateMedia() {
+    setState((current) => ({ ...current, mediaSaving: true, error: null }));
+    try {
+      await api.generateTutorialMedia(tutorial.id, voiceEnabled);
+      setTutorial(await api.tutorial(tutorial.id));
+      setState((current) => ({ ...current, mediaSaving: false }));
+    } catch (error) {
+      setState((current) => ({ ...current, mediaSaving: false, error }));
+    }
   }
 
   async function saveAnd(action) {
@@ -80,6 +105,8 @@ export default function TutorialPanel({ session, referenceVideos = [] }) {
   const editing = tutorial && tutorial.status !== 'approved';
   const reference = tutorial?.reference_video;
   const referenceUrl = reference?.url || (reference?.id ? `/api/reference-videos/${reference.id}/video` : null);
+  const media = tutorial?.media;
+  const mediaUrl = media?.url || null;
 
   return (
     <Panel title={<><Sparkles size={16} /> AI exercise tutorial</>} subtitle="Text tutorial plus an approved reference video">
@@ -107,6 +134,17 @@ export default function TutorialPanel({ session, referenceVideos = [] }) {
         <div className="tutorial-editor">
           <div className="tutorial-meta"><span className={`badge ${tutorial.status === 'approved' ? 'badge-green' : tutorial.status === 'request_changes' ? 'badge-amber' : 'badge-grey'}`}>{tutorial.status.replace('_', ' ')}</span><span className="muted small">{tutorial.exercise} · {tutorial.target_reps} repetitions{tutorial.target_depth_deg ? ` · ${tutorial.target_depth_deg}° depth` : ''}</span></div>
           {referenceUrl && <div className="reference"><span className="mini-label"><Video size={13} /> Approved reference video: {reference?.title}</span><video src={referenceUrl} controls playsInline preload="metadata" /></div>}
+          <div className="tutorial-media-controls">
+            <label className="check"><input type="checkbox" checked={voiceEnabled} onChange={(event) => setVoiceEnabled(event.target.checked)} disabled={state.mediaSaving || media?.status === "queued" || media?.status === "processing"} /> <Volume2 size={14} /> Add local voice guidance</label>
+            <button type="button" className="primary-button" disabled={state.mediaSaving || !referenceUrl || media?.status === "queued" || media?.status === "processing"} onClick={generateMedia}>
+              <Video size={15} /> {state.mediaSaving ? "Generating tutorial video…" : media?.status === "ready" ? "Regenerate tutorial video" : "Generate tutorial video"}
+            </button>
+            {media?.status === "queued" || media?.status === "processing" ? <p className="muted small">Media generation is {media.status}…</p> : null}
+            {media?.status === "failed" ? <p className="error-text">Tutorial media could not be generated. You can try again.</p> : null}
+            {media?.voice_status === "unavailable" ? <p className="muted small">Video generated without voice guidance because no local TTS engine was available.</p> : null}
+            {mediaUrl && <div className="reference"><span className="mini-label"><Video size={13} /> Generated tutorial preview</span><video src={mediaUrl} controls playsInline preload="metadata" /><a className="text-button" href={mediaUrl} download>Download tutorial video</a></div>}
+          </div>
+
           <label className="field"><span>Verified movement findings</span><textarea rows={3} value={form.verified_findings} onChange={(event) => edit('verified_findings', event.target.value)} disabled={!editing} /></label>
           <label className="field"><span>Personalized coaching cues <small>(one per line)</small></span><textarea rows={3} value={form.coaching_cues} onChange={(event) => edit('coaching_cues', event.target.value)} disabled={!editing} /></label>
           <label className="field"><span>Warnings <small>(one per line)</small></span><textarea rows={3} value={form.warnings} onChange={(event) => edit('warnings', event.target.value)} disabled={!editing} /></label>
