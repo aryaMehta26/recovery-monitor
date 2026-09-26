@@ -29,6 +29,8 @@ export default function PatientHome({ patientId, view = 'today' }) {
     latest.reload();
   };
   const completedSessions = history.data?.filter((s) => s.stage === 'done').length ?? 0;
+  // Brand-new patients (no plan, no sessions) only see how to get started; recording appears with the plan.
+  const firstTime = !carePlan && history.data && history.data.length === 0;
   const needsReview = latest.data?.flag?.flagged && !latest.data?.review;
   const status = latest.data?.stage && latest.data.stage !== 'done'
     ? 'Analysis in progress'
@@ -77,7 +79,20 @@ export default function PatientHome({ patientId, view = 'today' }) {
         </div>
       )}
 
-      {view === 'today' && (<>
+      {view === 'today' && firstTime && (
+        <section className="patient-workflow" aria-label="How it works">
+          <div className="workflow-heading"><span className="eyebrow">How it works</span><span className="muted small">Three steps</span></div>
+          <div className="workflow-steps">
+            <div className="workflow-step current"><span className="workflow-number">1</span><div><strong>Tell us what’s going on</strong><small>Talk to the AI assistant; it prepares your request</small></div></div>
+            <ArrowRight className="workflow-arrow" size={16} />
+            <div className="workflow-step"><span className="workflow-number">2</span><div><strong>Get your plan</strong><small>A physiotherapist sets your exercises and a how-to video</small></div></div>
+            <ArrowRight className="workflow-arrow" size={16} />
+            <div className="workflow-step"><span className="workflow-number">3</span><div><strong>Record and get feedback</strong><small>Film your exercise; it’s analysed on this device</small></div></div>
+          </div>
+        </section>
+      )}
+
+      {view === 'today' && !firstTime && (<>
       <section className="patient-overview" aria-label="Your recovery overview">
         <div className="overview-card overview-next">
           <div className="overview-icon"><Activity size={17} /></div>
