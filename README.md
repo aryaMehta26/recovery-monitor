@@ -54,7 +54,7 @@ approved sessions become that patient's personal baseline, so the analysis gets 
 journey
     title One patient, end to end
     section Patient
-      Describes the problem by voice (Whisper + LLM intake): 5: Patient
+      Describes the problem by voice to the AI intake: 5: Patient
       Matched to a physio by specialty: 4: Patient
       Sees plan, instructions and a correct-form video: 5: Patient
       Records the exercise and a voice check-in: 4: Patient
@@ -65,7 +65,7 @@ journey
       LLM drafts a report from measurements and the patient's words: 4: Nano
     section Physiotherapist
       Reviews flagged reps on a synced video and angle chart: 5: Physio
-      Approves or asks for changes; approved reps become the baseline: 5: Physio
+      Approves or asks for changes, approved reps become the baseline: 5: Physio
 ```
 
 **For patients**
